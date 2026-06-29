@@ -1,0 +1,8 @@
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+
+### VSCode ###
+.vscode
+
+### Intellij ###
+.idea/*
+safe-chain-symlinks.iml

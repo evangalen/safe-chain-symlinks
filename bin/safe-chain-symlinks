@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Purpose: Install malware protection wrappers for NVM-managed Node versions only
+
+set -euo pipefail
+
+SELF="${BASH_SOURCE[0]}"
+REPO_DIR="$(dirname "$SELF")/.."
+
+source "$REPO_DIR/scripts/read-dot-env.sh"
+
+LOCAL_VERSION="$(cat ${REPO_DIR}/VERSION.txt)"
+
+SAFE_CHAIN_INSTALL_DIR="$HOME/.safe-chain"
+SAFE_CHAIN_BIN_DIR="$SAFE_CHAIN_INSTALL_DIR/bin"
+SAFE_CHAIN_BIN="$SAFE_CHAIN_BIN_DIR/safe-chain"
+
+INSTALLED_SAFE_CHAIN_VERSION="$("$SAFE_CHAIN_BIN" --version 2> /dev/null | awk '{print $4}' || echo 'N/A')"
+
+
+CI_MODE=false
+if [[ " $* " == *" --ci "* ]]; then
+  CI_MODE=true
+fi
+
+if ! $CI_MODE; then
+  GIT_FETCHED="$(git fetch 2> /dev/null && echo 'true' || echo 'false')"
+
+  if [[ "$GIT_FETCHED" == "true" ]]; then
+    pushd $REPO_DIR >/dev/null
+    REMOTE_VERSION=$(git show origin/${UPSTREAM_BRANCH:-$(git branch --show-current)}:VERSION.txt 2> /dev/null || echo "N/A")
+    popd >/dev/null
+  else
+    REMOTE_VERSION="N/A"
+  fi
+fi
+
+
+echo "safe-chain-symlinks (version: $LOCAL_VERSION; Aikido Safe-Chain: $INSTALLED_SAFE_CHAIN_VERSION)"
+echo
+
+if ! $CI_MODE; then
+  if [[ $# -eq 0 ]] || [[ "$1" != "update" && "$1" != "uninstall" ]]; then
+    if [[ "$REMOTE_VERSION" != "N/A" && "$REMOTE_VERSION" != "$LOCAL_VERSION" || "$INSTALLED_SAFE_CHAIN_VERSION" != "N/A" && "$SAFE_CHAIN_VERSION" != "$INSTALLED_SAFE_CHAIN_VERSION" ]]; then
+      if [[ "$REMOTE_VERSION" != "N/A" && "$REMOTE_VERSION" != "$LOCAL_VERSION" ]]; then
+        echo "⊘  Please update \"safe-chain-symlinks\" to $REMOTE_VERSION using the command:"
+      else
+        echo "⊘  Please update Aikido Safe-Chain to $SAFE_CHAIN_VERSION using the command:"
+      fi
+
+      echo "${BASH_SOURCE[0]} update"
+      exit 1
+    fi
+  fi
+
+  if [[ "$REMOTE_VERSION" == "N/A" && $# -ge 1 ]]; then
+    case "$1" in
+      install|update)
+        if [[ " $* " != *" --force "* ]]; then
+          echo "⊘  Could not determine if you're using an up-to-date \"safe-chain-symlinks\" repo." >&2
+          echo "   Ensure you have the connectivity to do a \`git fetch\` or alternatively suppress this error using \`--force\`."
+          exit 1
+        fi
+        ;;
+    esac
+  fi
+fi
+
+if [[ $# -eq 0  ]]; then
+  echo "No command-line option was provided; supported options are:"
+  echo " - \`install\`:         install Aikido Safe-Chain including \"safe-chain-symlinks\" enhancements"
+  echo " - \`uninstall\`:       uninstall Aikido Safe-Chain including \"safe-chain-symlinks\" enhancements"
+  echo " - \`update\`:          update Aikido Safe-Chain installation including \"safe-chain-symlinks\" enhancements"
+  echo " - \`update-wrappers\`: updates symlink wrappers of \"safe-chain-symlinks\" for all package managers on the PATH"
+else
+  OPTION="$1"
+
+  shift
+
+  if [[ "$OPTION" == "install" ]]; then
+    "$REPO_DIR/scripts/install.sh" "$@"
+  elif [[ "$OPTION" == "uninstall" ]]; then
+    "$REPO_DIR/scripts/uninstall.sh" "$@"
+  elif [[ "$OPTION" == "update" ]]; then
+    "$REPO_DIR/scripts/update.sh" "$@"
+  elif [[ "$OPTION" == "update-wrappers" ]]; then
+    "$REPO_DIR/scripts/update-wrappers.sh" "$@"
+  fi
+fi
